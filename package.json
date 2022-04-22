@@ -1,0 +1,21 @@
+{
+  "version": "1.0.0",
+  "description": "Electron WebSocket Server",
+  "main": "app.js",
+  "author": "Park Tae-Young",
+  "license": "HandySoft",
+  "scripts": {
+    "start": "node app.js",
+    "start:dev": "nodemon --watch src/ src/app.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.17.3",
+    "express-session": "^1.17.2",
+    "socket.io": "^4.4.1",
+    "ws": "^8.5.0"
+  },
+  "devDependencies": {
+    "nodemon": "^2.0.15"
+  }
+}
