@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<meta charset="UTF-8" />
+		<meta http-equiv="X-UA-Compatible" content="IE=edge" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-1BmE4kWBq78iYhFldvKuhfTAU6auU8tT94WrHftjDbrCEXSU1oBoqyl2QvZ6jIW3" crossorigin="anonymous" />
+		<title>socket.io Test page</title>
+		<script src="https://code.jquery.com/jquery-3.6.0.min.js" integrity="sha256-/xUj+3OJU5yExlq6GSYGSHk7tPXikynS7ogEvDej/m4=" crossorigin="anonymous"></script>
+		<script src="https://cdn.socket.io/4.4.1/socket.io.min.js" integrity="sha384-fKnu0iswBIqkjxrhQCTZ7qlLHOFEgNkRmK2vaO/LbTZSXdJfAu6ewRBdwHPhBo/H" crossorigin="anonymous"></script>
+		<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js" integrity="sha384-ka7Sk0Gln4gmtz2MlQnikT1wXgYsOg+OMhuP+IlRH9sENBO0LRn5q+8nbTov4+1p" crossorigin="anonymous"></script>
+		<script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+		<script>
+			const SOCKJS_URL = 'http://<%= server %>:<%= port %>';
+			const DATA_ENDPOINT = '<%= endpoint %>';
+			const [CONNECTION, CONNECT, DISCONNECT] = ['connection', 'connect', 'disconnect'];
+			const [ACCOUNT, CHAT, DATA, MESSAGE, ANNOUNCE, USERS] = ['account', 'chat', 'data', 'update.message', 'update.announce', 'update.users'];
+			const [FLAG_CONNECT, FLAG_DISCONNECT] = ['connect', 'disconnect'];
+
+			$(document).ready(() => {
+				const account = sessionStorage.getItem('account');
+				if (account) {
+					$('#account').val(account);
+				}
+			});
+
+			const connect = () => {
+				const account = $('#account').val();
+				sessionStorage.setItem('account', account);
+
+				const socket = io()
+					.on(CONNECT, () => {
+						console.log(CONNECT, 'by id', socket.id);
+						socket.emit(ACCOUNT, account);
+						$('#btnConnect').prop('disabled', true);
+					})
+					.on(DISCONNECT, () => {
+						console.log(DISCONNECT, socket.id);
+					})
+					.on(USERS, (users) => {
+						console.log(USERS, users);
+						$('#users').empty();
+						Object.values(users).forEach((user) => {
+							$(`<li class="list-group-item d-flex justify-content-between align-items-center ${user.name === account ? 'active' : ''}">${user.name} <small>${new Date(user.accessDate).toLocaleTimeString()}</small></li>`)
+								.data('account', user.name)
+								.on('click', (e) => {
+									$('#toId').val($(e.target).data('account'));
+								})
+								.appendTo($('#users'));
+						});
+					})
+					.on(MESSAGE, (from, message, time) => {
+						console.log(`${MESSAGE} from ${from} => ${message}`);
+						$('#fromMessages').append(`
+							<div class="alert alert-info m-1 p-2 w-75 ${account === from ? 'ms-auto' : ''}">
+								<div class="float-end"><small>${new Date(time).toLocaleTimeString()}</small></div>
+								<div>${account === from ? '' : from + ':'} ${message.replace(/[<>&'"]/g, function (c) {
+							switch (c) {
+								case '<':
+									return '&lt;';
+								case '>':
+									return '&gt;';
+								case '&':
+									return '&amp;';
+								case "'":
+									return '&apos;';
+								case '"':
+									return '&quot;';
+							}
+						})}</div>
+							</div>`);
+						scrollTo();
+					})
+					.on(ANNOUNCE, (announcement) => {
+						console.log(ANNOUNCE, announcement);
+						let message;
+						if (announcement.flag === FLAG_CONNECT) {
+							if (announcement.user.name === account) {
+								message = '어서오세요';
+							} else {
+								message = `${announcement.user.name}님이 들어오셨습니다.`;
+							}
+						} else if (announcement.flag === FLAG_DISCONNECT) {
+							message = `${announcement.user.name}님이 나가셨습니다.`;
+						} else {
+							throw new Error('unknown flay. ' + announcement.flag);
+						}
+						$('#fromMessages').append(`<div class="alert alert-success w-75 m-1 p-2">${message}</div>`);
+						scrollTo();
+					})
+					.on(DATA, (to, data, time) => {
+						console.log(`${DATA} to ${to} => `, data);
+						$('#fromNotify').prepend(`
+							<div class="alert alert-success m-1 p-2">
+								<div class="float-end"><small>${new Date(time).toLocaleTimeString()}</small></div>
+								<pre>${JSON.stringify(data, null, 2)}</pre>
+							</div>
+						`);
+					});
+
+				$('#chatSendBtn').on('click', () => {
+					socket.emit(CHAT, $('#chatTextarea').val());
+					$('#chatTextarea').val('');
+				});
+			};
+
+			const sendData = () => {
+				const id = $('#toId').val();
+				const data = $('#toMessage').val().trim();
+				console.log('data[' + data + ']');
+				const json = JSON.parse(data);
+
+				axios
+					.post(SOCKJS_URL + DATA_ENDPOINT, {
+						id: id,
+						data: json,
+					})
+					.then((response) => console.log);
+			};
+
+			const scrollTo = () => {
+				fromMessages.scrollTo({ top: $('#fromMessages').height() });
+			};
+		</script>
+	</head>
+	<body>
+		<div class="container">
+			<h1>socket.io client</h1>
+			<div class="d-flex fixed-bottom flex-column" id="announce"></div>
+			<div class="row">
+				<div class="col">
+					<h4>Connected Users</h4>
+					<div class="input-group my-3">
+						<input type="text" id="account" placeholder="account" class="form-control w-auto" onkeyup="if (event.keyCode === 13) connect()" />
+						<button onclick="connect()" class="btn btn-outline-primary" id="btnConnect">Connect</button>
+					</div>
+					<ul id="users" class="list-group"></ul>
+				</div>
+				<div class="col">
+					<h4>Send Data</h4>
+					<div class="form-floating mb-2">
+						<input type="text" id="toId" class="form-control" placeholder="id" />
+						<label for="toId"> To </label>
+					</div>
+					<div class="form-floating mb-2">
+						<textarea type="text" id="toMessage" class="form-control" placeholder="message" style="height: 120px">{ "a": 1, "b": 2 }</textarea>
+						<label for="toMessage"> JSON data </label>
+					</div>
+					<button onclick="sendData()" class="btn btn-outline-success">Send</button>
+					<div id="fromNotify" class="my-2" style="height: calc(100vh - 350px); overflow: auto"></div>
+				</div>
+				<div class="col">
+					<h4>Received Message</h4>
+					<div id="fromMessages" class="border border-info mb-2" style="height: calc(100vh - 180px); overflow: auto"></div>
+					<div class="input-group">
+						<textarea class="form-control border-info" id="chatTextarea"></textarea>
+						<button class="btn btn-outline-info" id="chatSendBtn">Send</button>
+					</div>
+				</div>
+			</div>
+		</div>
+	</body>
+</html>

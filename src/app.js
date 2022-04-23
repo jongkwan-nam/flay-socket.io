@@ -1,109 +1,175 @@
-const express = require('express');
-const { createServer } = require('http');
-const { Server } = require('socket.io');
-const querystring = require('querystring');
-const { join } = require('path');
+import express, { Router, json, static as _static, urlencoded } from 'express';
+import { createServer } from 'http';
+import { Server } from 'socket.io';
+import { join, resolve } from 'path';
+import cors from 'cors';
+import createError from 'http-errors';
+import ip from 'ip';
 
-const portNumber = 8090;
-
-const app = express();
-
-app.use(express.json());
-app.use(express.static(join(__dirname, '../public')));
-
-app.get('/', (request, response) => {
-	response.sendFile(join(__dirname, '../html/index.html'));
-});
-app.post('/webNotification', (request, response) => {
-	let body = '';
-	request.on('data', (data) => {
-		body += data;
-		if (body.length > 1e6) {
-			request.socket.destroy();
-		}
-	});
-	request.on('end', () => {
-		const post = querystring.parse(body);
-		const id = post['id'];
-		const data = post['data'];
-		if (id) {
-			const empcodes = id.split(';');
-			for (let i = 0; i < empcodes.length; i++) {
-				process.emit('notify', empcodes[i], data);
-			}
-		}
-		response.writeHead(200, { 'Content-Type': 'application/json' });
-		const json = { responseHead: { resultCode: 0, resultMessage: 'SUCCESS' }, responseData: { id: id, data: data } };
-		response.end(JSON.stringify(json));
-	});
-});
-
-process.on('notify', function (roomname, data) {
-	//	io.sockets.emit("updatemessage", "WebNotiServer", "notification..... !!!");
-	io.to(roomname).emit('updatemessage', roomname, data);
-	console.log('notify [->' + roomname + '] ' + data);
-});
-
-const httpServer = createServer(app);
-const io = new Server(httpServer);
+const __dirname = resolve();
 const usernames = {};
-io.on('connection', function (socket) {
-	console.log('io connection', socket.id);
+const SERVER = ip.address();
+const PORT = process.env.PORT || 8090;
+const DATA_ENDPOINT = '/webNotification';
+const [CONNECTION, CONNECT, DISCONNECT] = ['connection', 'connect', 'disconnect'];
+const [ACCOUNT, CHAT, DATA, MESSAGE, ANNOUNCE, USERS] = ['account', 'chat', 'data', 'update.message', 'update.announce', 'update.users'];
+const [FLAG_CONNECT, FLAG_DISCONNECT] = ['connect', 'disconnect'];
 
-	// when the client emits "sendchat", this listens and executes
-	socket.on('sendchat', function (data) {
-		// we tell the client to execute "updatemessage" with 2 parameters
-		io.emit('updatemessage', socket.username, data);
+const router = Router()
+	.get('/', (req, res) => {
+		res.render('index');
+	})
+	.get('/client', (req, res) => {
+		res.render('client', { server: SERVER, port: PORT, endpoint: DATA_ENDPOINT });
+	})
+	.post(DATA_ENDPOINT, (req, res) => {
+		let payload = {
+			id: null,
+			data: null,
+		};
+
+		console.log('webNotification received', req.body, req.params);
+
+		if (req.body) {
+			payload = req.body;
+		} else {
+			payload.id = req.params.id;
+			payload.data = req.params.data;
+		}
+
+		if (payload.id) {
+			payload.id.split(';').forEach((id) => {
+				process.emit(DATA, id, payload.data);
+			});
+
+			res.json({
+				responseHead: { resultCode: 0, resultMessage: 'SUCCESS' },
+				responseData: { id: payload.id, data: payload.data },
+			});
+		} else {
+			res.json({
+				responseHead: { resultCode: 99, resultMessage: 'FAIL' },
+				responseData: { id: payload.id, data: payload.data },
+			});
+		}
 	});
 
-	// when the client emits "adduser", this listens and executes
-	socket.on('adduser', function (username) {
-		// we store the username in the socket session for this client
-		socket.username = username;
-		// add the client"s username to the global list
+const app = express()
+	.set('views', join(__dirname, 'views'))
+	.set('view engine', 'ejs')
+	.use(cors())
+	.use(json())
+	.use(urlencoded({ extended: true }))
+	.use(_static(join(__dirname, 'public')))
+	.use('/', router)
+	.use((req, res, next) => {
+		next(createError(404));
+	})
+	.use((err, req, res, next) => {
+		// console.log(req.headers);
+		const resErr = {
+			isXhr: req.headers['x-requested-with'] === 'XMLHttpRequest' || req.headers.accept.indexOf('json') > -1,
+			status: err.status || 500,
+			message: err.message || 'unknown error',
+			stack: err.stack,
+		};
 
-		socket.room = username;
-		usernames[username] = username;
-		socket.join(username);
+		if (req.app.get('env') !== 'development') {
+			resErr.stack = null;
+		}
 
-		socket.emit('updatemessage', 'WebNotiServer', 'you have connected');
+		if (resErr.status !== 404) {
+			console.log('error', resErr);
+		}
 
-		// echo globally (all clients) that a person has connected
-		socket.broadcast.to(username).emit('updatemessage', 'WebNotiServer', username + ' has connected');
-
-		// update the list of users in chat, client-side
-		io.emit('updateusers', usernames);
-		console.log(socket.username + '님이 입장하였습니다.');
+		if (resErr.isXhr) {
+			res.status(resErr.status).json(resErr);
+		} else {
+			// set locals, only providing error in development
+			res.locals.message = resErr.message;
+			res.locals.error = resErr;
+			res.status(resErr.status).render('error');
+		}
 	});
 
-	// when the user disconnects.. perform this
-	socket.on('disconnect', function () {
-		// remove the username from global usernames list
-		delete usernames[socket.username];
+const httpServer = createServer(app)
+	.listen(PORT)
+	.on('error', (error) => {
+		console.error('server error', error);
+		if (error.syscall !== 'listen') {
+			throw error;
+		}
+		// handle specific listen errors with friendly messages
+		switch (error.code) {
+			case 'EACCES':
+				console.error(PORT + ' requires elevated privileges');
+				process.exit(1);
+			case 'EADDRINUSE':
+				console.error(PORT + ' is already in use');
+				process.exit(1);
+			default:
+				throw error;
+		}
+	})
+	.on('listening', () => {
+		const addr = httpServer.address();
+		const env = app.get('env');
+		console.log(`
+      socket.io Start.
+      ${JSON.stringify(addr)}
+      env: ${env}
+    `);
+	});
 
-		// update list of users in chat, client-side
-		io.emit('updateusers', usernames);
+const io = new Server(httpServer).on(CONNECTION, function (socket) {
+	console.log('incomming io connection', socket.id);
 
-		// echo globally that this client has left
-		//		socket.broadcast.emit("updatemessage", "WebNotiServer", socket.username + " has disconnected");
+	socket.on(ACCOUNT, (username) => {
+		const user = {
+			id: socket.id,
+			name: username,
+			accessDate: Date.now(),
+		};
+
+		socket.user = user;
+		socket.room = user.name;
+		socket.join(user.name);
+		usernames[username] = user;
+
+		io.emit(USERS, usernames);
+		socket.emit(ANNOUNCE, {
+			flag: FLAG_CONNECT,
+			user: user,
+		});
+		socket.broadcast.emit(ANNOUNCE, {
+			flag: FLAG_CONNECT,
+			user: user,
+		});
+
+		console.log(`connect [${socket.user.name}] total: ${Object.values(usernames).length}`);
+	});
+
+	socket.on(DISCONNECT, () => {
+		delete usernames[socket.user.name];
+
+		io.emit(USERS, usernames);
+		socket.broadcast.emit(ANNOUNCE, {
+			flag: FLAG_DISCONNECT,
+			user: socket.user,
+			time: Date.now(),
+		});
 		socket.leave(socket.room);
-		console.log(socket.username + ' disconnect. left ' + Object.values(usernames).length);
+
+		console.log(`disconnect [${socket.user.name}] total: ${Object.values(usernames).length}`);
+	});
+
+	socket.on(CHAT, (message) => {
+		io.emit(MESSAGE, socket.user.name, message, Date.now());
 	});
 });
 
-// 서버 종료 이벤트
-process.on('exit', function () {
-	console.warn(`
-	#############################################################
-			socket.io Server shutdown
-	#############################################################
-	`);
-});
+process.on(DATA, (to, data) => {
+	io.to(to).emit(DATA, to, data, Date.now());
 
-httpServer.listen(portNumber, () => {
-	console.log(`
-	#############################################################
-			socket.io Server start. Listening on ${portNumber}
-	#############################################################
-	`);
+	console.log('DATA to [' + to + '] ', data);
 });
