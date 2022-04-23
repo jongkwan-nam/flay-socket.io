@@ -1,14 +1,13 @@
 import express, { Router, json, static as _static, urlencoded } from 'express';
-import { createServer } from 'http';
+import { createServer } from 'https';
 import { Server } from 'socket.io';
 import { join, resolve } from 'path';
 import cors from 'cors';
 import createError from 'http-errors';
-import ip from 'ip';
+import fs from 'fs';
 
 const __dirname = resolve();
 const usernames = {};
-const SERVER = ip.address();
 const PORT = process.env.PORT || 8090;
 const DATA_ENDPOINT = '/webNotification';
 const [CONNECTION, CONNECT, DISCONNECT] = ['connection', 'connect', 'disconnect'];
@@ -20,7 +19,7 @@ const router = Router()
 		res.render('index');
 	})
 	.get('/client', (req, res) => {
-		res.render('client', { server: SERVER, port: PORT, endpoint: DATA_ENDPOINT });
+		res.render('client', { endpoint: DATA_ENDPOINT });
 	})
 	.post(DATA_ENDPOINT, (req, res) => {
 		let payload = {
@@ -92,7 +91,12 @@ const app = express()
 		}
 	});
 
-const httpServer = createServer(app)
+const options = {
+	pfx: fs.readFileSync('certs/kamoru.jk.p12'),
+	passphrase: '697489',
+};
+
+const httpServer = createServer(options, app)
 	.listen(PORT)
 	.on('error', (error) => {
 		console.error('server error', error);

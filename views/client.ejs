@@ -11,7 +11,6 @@
 		<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js" integrity="sha384-ka7Sk0Gln4gmtz2MlQnikT1wXgYsOg+OMhuP+IlRH9sENBO0LRn5q+8nbTov4+1p" crossorigin="anonymous"></script>
 		<script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
 		<script>
-			const SOCKJS_URL = 'http://<%= server %>:<%= port %>';
 			const DATA_ENDPOINT = '<%= endpoint %>';
 			const [CONNECTION, CONNECT, DISCONNECT] = ['connection', 'connect', 'disconnect'];
 			const [ACCOUNT, CHAT, DATA, MESSAGE, ANNOUNCE, USERS] = ['account', 'chat', 'data', 'update.message', 'update.announce', 'update.users'];
@@ -111,7 +110,7 @@
 				const json = JSON.parse(data);
 
 				axios
-					.post(SOCKJS_URL + DATA_ENDPOINT, {
+					.post(DATA_ENDPOINT, {
 						id: id,
 						data: json,
 					})
