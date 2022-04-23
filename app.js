@@ -119,9 +119,11 @@ const httpServer = createServer(options, app)
 		const addr = httpServer.address();
 		const env = app.get('env');
 		console.log(`
-      socket.io Start.
+  ####################################################
+      socket.io Server
       ${JSON.stringify(addr)}
       env: ${env}
+  ####################################################
     `);
 	});
 
