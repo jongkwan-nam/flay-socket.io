@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<title>socket.io Test page</title>
+		<link href="./dist/client.css" rel="stylesheet" />
+		<script defer="defer" src="./dist/runtime.js"></script>
+		<script defer="defer" src="./dist/vendors.js"></script>
+		<script defer="defer" src="./dist/client.js"></script>
+	</head>
+	<body>
+		<div class="container">
+			<h1>socket.io client</h1>
+			<div class="d-flex fixed-bottom flex-column" id="announce"></div>
+			<div class="row">
+				<div class="col">
+					<h4>Connected Users</h4>
+					<div class="input-group my-3">
+						<input type="text" id="account" placeholder="account" class="form-control w-auto" />
+						<button class="btn btn-outline-primary" id="btnConnect">Connect</button>
+					</div>
+					<ul id="users" class="list-group"></ul>
+				</div>
+				<div class="col">
+					<h4>Send Data</h4>
+					<div class="form-floating mb-2">
+						<input type="text" id="toId" class="form-control" placeholder="id" readonly />
+						<label for="toId"> To </label>
+					</div>
+					<div class="form-floating mb-2">
+						<textarea type="text" id="toMessage" class="form-control" placeholder="message" style="height: 120px">{ "a": 1, "b": 2 }</textarea>
+						<label for="toMessage"> JSON data </label>
+					</div>
+					<button id="btnSendData" class="btn btn-outline-success">Send</button>
+					<div id="fromNotify" class="my-2" style="height: calc(100vh - 350px); overflow: auto"></div>
+				</div>
+				<div class="col">
+					<h4>Received Message</h4>
+					<div id="fromMessages" class="border border-info mb-2" style="height: calc(100vh - 180px); overflow: auto"></div>
+					<div class="input-group">
+						<textarea class="form-control border-info" id="chatTextarea"></textarea>
+						<button class="btn btn-outline-info" id="chatSendBtn">Send</button>
+					</div>
+				</div>
+			</div>
+		</div>
+	</body>
+</html>
